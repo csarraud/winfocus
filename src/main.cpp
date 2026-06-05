@@ -75,8 +75,8 @@ static void apply_style()
 //  Variables globales de l'interface
 // ─────────────────────────────────────────────────────────
 static char  g_keyword[256]       = "";
-static bool  g_auto_refresh       = false;
-static float g_refresh_interval   = 3.0f;
+static bool  g_auto_refresh       = true;
+static float g_refresh_interval   = 1.0f;
 static float g_refresh_timer      = 0.0f;
 static int   g_drag_src           = -1;
 static int   g_rename_idx         = -1;
