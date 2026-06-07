@@ -32,7 +32,6 @@ X11WindowManager::~X11WindowManager()
 
 std::string X11WindowManager::get_window_title(Window w)
 {
-    // Essaie d'abord _NET_WM_NAME (UTF-8), puis WM_NAME
     Atom net_wm_name = XInternAtom(display_, "_NET_WM_NAME", False);
     Atom utf8_string  = XInternAtom(display_, "UTF8_STRING",  False);
 
@@ -54,7 +53,6 @@ std::string X11WindowManager::get_window_title(Window w)
     }
     if (prop) XFree(prop);
 
-    // Fallback: WM_NAME
     char* name = nullptr;
     if (XFetchName(display_, w, &name) && name) {
         std::string title(name);
@@ -77,7 +75,6 @@ void X11WindowManager::refresh(const std::string& keyword)
 {
     if (!display_) return;
 
-    // Récupère la liste des fenêtres via _NET_CLIENT_LIST
     Atom net_client_list = XInternAtom(display_, "_NET_CLIENT_LIST", False);
     Atom actual_type;
     int actual_format;
@@ -98,7 +95,6 @@ void X11WindowManager::refresh(const std::string& keyword)
             all_windows.push_back(wins[i]);
         XFree(prop);
     } else {
-        // Fallback: énumération via XQueryTree
         Window parent;
         Window* children = nullptr;
         unsigned int nchildren;
@@ -109,7 +105,6 @@ void X11WindowManager::refresh(const std::string& keyword)
         }
     }
 
-    // Sauvegarde les noms personnalisés existants
     std::vector<ManagedWindow> old_windows = windows_;
     windows_.clear();
 
@@ -119,13 +114,11 @@ void X11WindowManager::refresh(const std::string& keyword)
         std::string title = get_window_title(w);
         if (title.empty()) continue;
 
-        // Filtre par mot clé (sensible à la casse)
         if (!keyword.empty()) {
             if (title.find(keyword) == std::string::npos)
                 continue;
         }
 
-        // Cherche si la fenêtre était déjà dans la liste
         ManagedWindow mw(w, title);
         for (const auto& old : old_windows) {
             if (old.xid == w && old.name_edited) {
@@ -137,7 +130,6 @@ void X11WindowManager::refresh(const std::string& keyword)
         windows_.push_back(mw);
     }
 
-    // Réinitialise le focus si nécessaire
     if (current_focus_ >= static_cast<int>(windows_.size()))
         current_focus_ = windows_.empty() ? -1 : 0;
 }
@@ -150,7 +142,6 @@ void X11WindowManager::focus_window(int index)
     Window w = windows_[index].xid;
     current_focus_ = index;
 
-    // Envoie _NET_ACTIVE_WINDOW si disponible (WM moderne)
     Atom net_active = XInternAtom(display_, "_NET_ACTIVE_WINDOW", False);
     if (net_active != None) {
         XEvent ev;
@@ -159,14 +150,13 @@ void X11WindowManager::focus_window(int index)
         ev.xclient.window       = w;
         ev.xclient.message_type = net_active;
         ev.xclient.format       = 32;
-        ev.xclient.data.l[0]    = 2; // source: pager
+        ev.xclient.data.l[0]    = 2;
         ev.xclient.data.l[1]    = CurrentTime;
         ev.xclient.data.l[2]    = 0;
         XSendEvent(display_, root_, False,
                    SubstructureNotifyMask | SubstructureRedirectMask, &ev);
     }
 
-    // Fallback direct
     XRaiseWindow(display_, w);
     XSetInputFocus(display_, w, RevertToPointerRoot, CurrentTime);
     XFlush(display_);
@@ -204,7 +194,6 @@ void X11WindowManager::move_window(int from, int to)
     windows_.erase(windows_.begin() + from);
     windows_.insert(windows_.begin() + to, mw);
 
-    // Ajuste l'index de focus
     if (current_focus_ == from) {
         current_focus_ = to;
     } else if (from < current_focus_ && to >= current_focus_) {
@@ -221,19 +210,15 @@ void X11WindowManager::setup_global_grab()
 
     grab_root_ = DefaultRootWindow(grab_display_);
 
-    // Capture Button2 (clic molette) sur toute la surface de l'écran,
-    // quelle que soit la fenêtre active et quels que soient les modificateurs.
-    // GrabModeSync pour le pointeur : on doit appeler XAllowEvents pour
-    // que les autres applis continuent de recevoir leurs événements normalement.
     XGrabButton(
         grab_display_,
-        Button2,          // bouton du milieu
-        AnyModifier,      // peu importe Shift/Ctrl/Alt
+        Button2,
+        AnyModifier,
         grab_root_,
-        False,            // owner_events : False = on reçoit l'event, pas la fenêtre cible
+        False,
         ButtonPressMask,
-        GrabModeAsync,    // pointeur async : on ne bloque pas les autres
-        GrabModeAsync,    // clavier async
+        GrabModeAsync,
+        GrabModeAsync,
         None, None);
 
     XFlush(grab_display_);
@@ -252,15 +237,38 @@ bool X11WindowManager::poll_global_middle_click()
     if (!grab_display_) return false;
 
     XEvent ev;
-    // XCheckMaskEvent est non-bloquant
     if (XCheckMaskEvent(grab_display_, ButtonPressMask, &ev)) {
         if (ev.type == ButtonPress && ev.xbutton.button == Button2) {
-            // Relâche le grab pour que les autres applis restent fonctionnelles
+            int click_x = ev.xbutton.x_root;
+            int click_y = ev.xbutton.y_root;
+
+            // Vérifie si le clic tombe dans la géométrie d'au moins une
+            // fenêtre de la liste. On utilise display_ (connexion principale)
+            // pour XGetWindowAttributes + XTranslateCoordinates car c'est
+            // elle qui connaît les XIDs de _NET_CLIENT_LIST.
+            bool in_managed = false;
+            for (const auto& mw : windows_) {
+                XWindowAttributes attrs;
+                if (!XGetWindowAttributes(display_, mw.xid, &attrs))
+                    continue;
+
+                // Traduit l'origine de la fenêtre en coordonnées root
+                int win_x, win_y;
+                Window child;
+                XTranslateCoordinates(display_, mw.xid, root_,
+                                      0, 0, &win_x, &win_y, &child);
+
+                if (click_x >= win_x && click_x < win_x + attrs.width &&
+                    click_y >= win_y && click_y < win_y + attrs.height) {
+                    in_managed = true;
+                    break;
+                }
+            }
+
             XAllowEvents(grab_display_, ReplayPointer, ev.xbutton.time);
             XFlush(grab_display_);
-            return true;
+            return in_managed;
         }
-        // Autre bouton inattendu : relâche quand même
         XAllowEvents(grab_display_, ReplayPointer, CurrentTime);
         XFlush(grab_display_);
     }

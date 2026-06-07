@@ -181,7 +181,6 @@ static void render_ui(X11WindowManager& wm, float dt)
 
         ImGui::PushID(i);
 
-        // Dimensions fixes
         const float HANDLE_W    = 28.0f;
         const float NUM_W       = 28.0f;
         const float BTN_FOCUS_W = 76.0f;
@@ -190,7 +189,6 @@ static void render_ui(X11WindowManager& wm, float dt)
         const float ROW_H       = 48.0f;
         const float BTN_H       = 28.0f;
 
-        // Capture la position et la largeur disponible AVANT tout widget
         ImVec2 row_pos = ImGui::GetCursorScreenPos();
         float  row_w   = ImGui::GetContentRegionAvail().x;
 
@@ -201,7 +199,6 @@ static void render_ui(X11WindowManager& wm, float dt)
         float btn_y    = row_pos.y + (ROW_H - BTN_H) * 0.5f;
         float btn_x    = row_pos.x + row_w - btn_area - GAP;
 
-        // Fond coloré si focus
         if (is_focus) {
             ImGui::GetWindowDrawList()->AddRectFilled(
                 row_pos, {row_pos.x + row_w, row_pos.y + ROW_H},
@@ -211,8 +208,7 @@ static void render_ui(X11WindowManager& wm, float dt)
                 IM_COL32(52, 178, 120, 160), 6.0f, 0, 1.5f);
         }
 
-        // ── 1. Drag handle (poignée) ──────────────────────
-        // Placé en premier dans le flow — c'est lui qui "occupe" la ligne
+        // ── 1. Drag handle ────────────────────────────────
         ImGui::PushStyleColor(ImGuiCol_Button,        {0,0,0,0});
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, {1,1,1,0.07f});
         ImGui::PushStyleColor(ImGuiCol_ButtonActive,  {1,1,1,0.12f});
@@ -227,8 +223,7 @@ static void render_ui(X11WindowManager& wm, float dt)
         ImGui::PopStyleVar();
         ImGui::PopStyleColor(3);
 
-        // ── 2. Zone drop (hors boutons) ───────────────────
-        // Couvre uniquement la zone handle+numéro+nom, PAS les boutons
+        // ── 2. Zone drop ──────────────────────────────────
         ImGui::SetCursorScreenPos({row_pos.x + HANDLE_W, row_pos.y});
         ImGui::InvisibleButton("##drop_zone", {name_x - row_pos.x - HANDLE_W + name_w, ROW_H});
         if (ImGui::BeginDragDropTarget()) {
@@ -262,7 +257,6 @@ static void render_ui(X11WindowManager& wm, float dt)
                 g_rename_focus_set = false;
             }
         } else {
-            // Bouton invisible pour le double-clic (renommage)
             ImGui::InvisibleButton("##name_btn", {name_w, BTN_H});
             if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0)) {
                 g_rename_idx = i;
@@ -270,7 +264,6 @@ static void render_ui(X11WindowManager& wm, float dt)
                 g_rename_buf[sizeof(g_rename_buf)-1] = '\0';
                 g_rename_focus_set = false;
             }
-            // Texte du nom (dessiné par-dessus le bouton invisible)
             ImU32 name_col = is_focus ? IM_COL32(82,200,160,255) : IM_COL32(220,224,235,255);
             ImGui::GetWindowDrawList()->AddText({name_x, btn_y + 6}, name_col,
                 wins[i].display_name.c_str());
@@ -306,7 +299,6 @@ static void render_ui(X11WindowManager& wm, float dt)
             ImGui::SetTooltip("Double-clic sur le nom pour renommer");
         ImGui::PopStyleColor();
 
-        // ── Séparateur + avancement du curseur ───────────
         ImGui::SetCursorScreenPos({row_pos.x, row_pos.y + ROW_H});
         ImGui::Separator();
 
@@ -378,7 +370,7 @@ int main()
         float  dt  = (float)(now - last_time);
         last_time  = now;
 
-        // Clic molette global (capturé sur tout l'écran via XGrabButton)
+        // Clic molette global : cycle uniquement si le clic est dans une fenêtre gérée
         if (wm.poll_global_middle_click())
             wm.focus_next();
 
