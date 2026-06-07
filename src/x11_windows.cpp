@@ -217,8 +217,8 @@ void X11WindowManager::setup_global_grab()
         grab_root_,
         False,
         ButtonPressMask,
-        GrabModeAsync,
-        GrabModeAsync,
+        GrabModeSync,   // pointeur sync : freezé jusqu'à XAllowEvents
+        GrabModeAsync,  // clavier async
         None, None);
 
     XFlush(grab_display_);
