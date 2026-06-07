@@ -1,7 +1,6 @@
 # WinFocus — Gestionnaire de fenêtres X11 avec ImGui
 
 Interface graphique permettant de lister, renommer, ordonner et mettre au focus des fenêtres X11 filtrées par mot-clé.
-Développé via Claude Code.
 
 ## Fonctionnalités
 
@@ -10,9 +9,15 @@ Développé via Claude Code.
 | **Filtrage** | Saisir un mot-clé (sensible à la casse), cliquer *Rafraîchir* |
 | **Auto-refresh** | Cocher *Auto* + régler l'intervalle (1–30 s) |
 | **Focus** | Clic sur le bouton **Focus** de la ligne |
-| **Focus cycle** | Clic molette — capturé globalement, fonctionne depuis n'importe quelle fenêtre |
+| **Focus cycle** | Clic molette depuis une fenêtre de la liste — cycle vers la suivante |
 | **Renommer** | Double-clic sur le nom **ou** bouton `...` — Entrée pour valider |
 | **Réordonner** | Glisser-déposer via la poignée `:::` à gauche |
+
+## Comportement du clic molette
+
+Le clic molette est capturé globalement via `XGrabButton` sur toute la surface de l'écran. Il ne déclenche le cycle de fenêtres que si le clic est effectué **dans la géométrie d'une des fenêtres de la liste** (détection par `XGetWindowAttributes` + `XTranslateCoordinates`).
+
+Si le clic est fait en dehors de toute fenêtre gérée, il est retransmis normalement à l'application cible (`XAllowEvents(ReplayPointer)`) — le comportement natif du clic molette (fermer un onglet, coller le presse-papier, scroller, etc.) est préservé.
 
 ## Dépendances
 
@@ -54,18 +59,15 @@ winfocus/
 
 ## Notes X11
 
-- La liste des fenêtres utilise `_NET_CLIENT_LIST` (EWMH) pour les WM modernes (GNOME, KDE, XFWM…).
-  Fallback sur `XQueryTree` si non disponible.
+- La liste des fenêtres utilise `_NET_CLIENT_LIST` (EWMH) pour les WM modernes (GNOME, KDE, XFWM…). Fallback sur `XQueryTree` si non disponible.
 - Le focus utilise `_NET_ACTIVE_WINDOW` (méthode recommandée) + `XRaiseWindow`/`XSetInputFocus` en fallback.
-- Le clic molette est capturé globalement via `XGrabButton` sur un display secondaire, ce qui permet de
-  cycler entre les fenêtres sans revenir sur WinFocus. Le clic est ensuite rejoué (`ReplayPointer`) pour
-  ne pas perturber les autres applications.
+- Le grab global utilise `GrabModeSync` pour le pointeur : cela freeze le pointeur jusqu'à `XAllowEvents`, ce qui garantit que `ReplayPointer` retransmet le clic exactement comme s'il n'avait jamais été intercepté.
 - Le renommage est **local à l'application** : il ne modifie pas le titre X11 réel (`WM_NAME`).
 
 ## Raccourcis
 
 | Action | Raccourci |
 |--------|-----------|
-| Fenêtre suivante | Clic molette (n'importe où sur le bureau) |
+| Fenêtre suivante | Clic molette depuis une fenêtre de la liste |
 | Valider le renommage | Entrée |
 | Annuler le renommage | Échap |
